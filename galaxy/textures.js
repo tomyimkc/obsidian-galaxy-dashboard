@@ -1,0 +1,3 @@
+window.GALAXY_TEXTURES = {
+
+};

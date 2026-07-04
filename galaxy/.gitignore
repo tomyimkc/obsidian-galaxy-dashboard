@@ -1,0 +1,13 @@
+# Your generated vault data — ships as a demo (force-added once), then ignored
+# so you can never accidentally commit your real note titles/paths.
+data.js
+
+# macOS / editor cruft
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc

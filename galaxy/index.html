@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sophia Galaxy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#04060f;
+    --ink:#dbe7ff;
+    --dim:#8da3c8;
+    --accent:#7dd3fc;
+    --card:rgba(10,18,36,.55);
+    --card-border:rgba(125,211,252,.16);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--bg);
+    font-family:"Noto Sans SC",-apple-system,sans-serif;color:var(--ink);
+    -webkit-font-smoothing:antialiased;user-select:none}
+  canvas{display:block;position:fixed;inset:0}
+
+  /* ---------- 银河底图（bg.jpg/bg.png 放进文件夹即生效） ---------- */
+  #bg{position:fixed;inset:-70px;background-size:cover;background-position:center;
+    will-change:transform;transform:scale(1.12);display:none;
+    transition:filter .6s ease}
+  body.has-bg #bg{display:block}
+  #bg::after{content:"";position:absolute;inset:0;  /* 暗角，保 UI 可读性 */
+    background:radial-gradient(120% 100% at 50% 45%,transparent 40%,rgba(3,5,12,.55) 100%)}
+  body.focused #bg{filter:brightness(.4) blur(2px) saturate(.8)}
+  /* 3D 幕板模式下的暗角（保 UI 可读性），盖在画布上、UI 之下 */
+  body.has-bg3d::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(2,4,12,.55) 100%)}
+
+  /* ---------- 加载 ---------- */
+  #loader{position:fixed;inset:0;background:var(--bg);z-index:99;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:18px;
+    transition:opacity .8s ease;font-family:Orbitron,monospace;letter-spacing:.4em;
+    color:var(--accent);font-size:13px}
+  #loader.done{opacity:0;pointer-events:none}
+  #loader .pulse{width:10px;height:10px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 24px 6px rgba(125,211,252,.6);animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{50%{transform:scale(1.8);opacity:.4}}
+
+  /* ---------- 标签层 ---------- */
+  #labels{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+  .pl-label{position:absolute;transform:translate(-50%,-100%);text-align:center;
+    transition:opacity .4s ease;will-change:left,top;pointer-events:none;white-space:nowrap}
+  .pl-label .en{font-family:Orbitron,monospace;font-size:15px;font-weight:700;
+    letter-spacing:.12em;color:var(--c,#fff);
+    text-shadow:0 0 14px var(--c,#7dd3fc),0 2px 8px rgba(0,0,0,.8)}
+  .pl-label .zh{font-size:12.5px;color:#c3d2ee;margin-top:3px;text-shadow:0 1px 6px rgba(0,0,0,.9)}
+  .pl-label .zh b{color:var(--c,#7dd3fc);font-weight:600}
+  .pl-label.hot .en{color:#fff;text-shadow:0 0 18px var(--c,#7dd3fc),0 0 36px var(--c,#7dd3fc)}
+  .moon-label{position:absolute;transform:translate(-50%,-130%);white-space:nowrap;
+    font-size:10.5px;color:#cfe3ff;text-shadow:0 0 8px rgba(0,0,0,.9);
+    background:rgba(8,14,30,.55);border:1px solid rgba(125,211,252,.25);
+    padding:2px 8px;border-radius:99px;backdrop-filter:blur(4px);pointer-events:none}
+  .moon-label span{color:var(--dim);margin-left:4px}
+
+  /* ---------- 顶部 ---------- */
+  header{position:fixed;top:26px;left:0;right:0;text-align:center;z-index:4;pointer-events:none}
+  header h1{font-family:Orbitron,monospace;font-weight:700;font-size:30px;letter-spacing:.42em;
+    text-indent:.42em;color:#eaf3ff;text-shadow:0 0 30px rgba(125,211,252,.55)}
+  header p{margin-top:8px;font-size:12.5px;letter-spacing:.9em;text-indent:.9em;color:var(--dim)}
+
+  #clock{position:fixed;top:28px;right:34px;text-align:right;z-index:4;pointer-events:none}
+  #clock .date{font-size:13px;color:var(--dim);letter-spacing:.12em}
+  #clock .time{font-family:Orbitron,monospace;font-size:30px;font-weight:500;color:#dff1ff;
+    text-shadow:0 0 18px rgba(125,211,252,.45);margin-top:2px}
+  #clock .mode{margin-top:8px;font-size:10.5px;letter-spacing:.25em;color:var(--accent)}
+  #clock .mode::before{content:"●";margin-right:6px;font-size:8px}
+
+  /* ---------- 卡片通用 ---------- */
+  .glass{background:var(--card);border:1px solid var(--card-border);border-radius:14px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    box-shadow:0 10px 40px rgba(0,0,0,.45)}
+
+  /* ---------- 左侧总览 ---------- */
+  #overview{position:fixed;top:96px;left:34px;width:248px;padding:18px 20px;z-index:4}
+  #overview h3,#recent h3{font-size:12px;letter-spacing:.28em;color:var(--accent);
+    font-weight:500;margin-bottom:14px}
+  .stat{display:flex;justify-content:space-between;align-items:center;padding:7px 0;
+    font-size:13px;color:var(--ink);border-bottom:1px dashed rgba(125,211,252,.1)}
+  .stat:last-child{border-bottom:none}
+  .stat b{font-family:Orbitron,monospace;font-weight:500;color:#fff;font-size:15px}
+  .stat .ico{margin-right:8px;opacity:.8}
+
+  #recent{position:fixed;bottom:30px;left:34px;width:300px;padding:16px 20px;z-index:4}
+  .note-row{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:7px 2px;font-size:12.5px;cursor:pointer;border-radius:6px;color:var(--ink)}
+  .note-row:hover{background:rgba(125,211,252,.08);color:#fff}
+  .note-row .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .note-row .t::before{content:"📄";margin-right:7px;font-size:11px}
+  .note-row .ago{flex:none;font-size:11px;color:var(--dim)}
+
+  /* ---------- 提示/名言 ---------- */
+  #hint{position:fixed;bottom:118px;left:50%;transform:translateX(-50%);z-index:4;
+    font-size:11px;letter-spacing:.2em;color:var(--dim);pointer-events:none;
+    transition:opacity .5s;text-shadow:0 1px 6px rgba(0,0,0,.9)}
+
+  /* ---------- 底部导航（demo 同款格式） ---------- */
+  #nav{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:5;
+    display:flex;gap:6px;padding:10px;border-radius:18px}
+  .nav-item{display:flex;flex-direction:column;align-items:center;gap:7px;
+    width:88px;padding:12px 0 10px;border-radius:13px;cursor:pointer;
+    border:1px solid transparent;transition:all .25s;color:var(--dim)}
+  .nav-item .ni{font-size:20px;line-height:1;filter:grayscale(.4) opacity(.8)}
+  .nav-item span{font-size:11.5px;letter-spacing:.08em}
+  .nav-item:hover{background:rgba(125,211,252,.08);color:var(--ink)}
+  .nav-item.active{background:rgba(125,211,252,.12);border-color:rgba(125,211,252,.35);
+    color:#fff;box-shadow:0 0 18px rgba(125,211,252,.18) inset,0 0 14px rgba(125,211,252,.12)}
+  .nav-item.active .ni{filter:none}
+
+  /* ---------- 弹层（网格/时间线/统计/搜索） ---------- */
+  #modal{position:fixed;inset:0;z-index:8;display:none;align-items:center;
+    justify-content:center;background:rgba(3,5,12,.55);backdrop-filter:blur(6px)}
+  #modal.open{display:flex}
+  #modal .box{width:min(860px,86vw);max-height:74vh;display:flex;flex-direction:column;
+    border-radius:18px;overflow:hidden}
+  #modal .m-head{display:flex;justify-content:space-between;align-items:center;
+    padding:18px 24px;border-bottom:1px solid rgba(125,211,252,.12)}
+  #modal .m-head h2{font-size:16px;letter-spacing:.2em;color:var(--accent);font-weight:500}
+  #modal .m-close{cursor:pointer;color:var(--dim);font-size:18px;padding:4px 10px;
+    border-radius:8px}
+  #modal .m-close:hover{color:#fff;background:rgba(125,211,252,.1)}
+  #modal .m-body{padding:20px 24px;overflow-y:auto}
+  #modal .m-body::-webkit-scrollbar{width:4px}
+  #modal .m-body::-webkit-scrollbar-thumb{background:rgba(125,211,252,.25);border-radius:4px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .g-card{border:1px solid rgba(125,211,252,.14);border-radius:12px;padding:14px 16px;
+    cursor:pointer;background:rgba(125,211,252,.04);transition:all .2s}
+  .g-card:hover{border-color:var(--c);box-shadow:0 0 18px color-mix(in srgb,var(--c) 30%,transparent);
+    transform:translateY(-2px)}
+  .g-card .g-en{font-family:Orbitron,monospace;font-size:12px;color:var(--c);letter-spacing:.1em}
+  .g-card .g-zh{font-size:15px;color:#fff;margin:6px 0 4px;font-weight:600}
+  .g-card .g-zh::before{content:"●";color:var(--c);font-size:9px;margin-right:8px;vertical-align:2px}
+  .g-card .g-meta{font-size:11.5px;color:var(--dim)}
+  .bar-row{display:flex;align-items:center;gap:12px;margin-bottom:13px;font-size:12.5px}
+  .bar-row .b-name{width:150px;text-align:right;color:var(--ink);flex:none;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar-row .b-track{flex:1;height:14px;border-radius:99px;background:rgba(125,211,252,.07);overflow:hidden}
+  .bar-row .b-fill{height:100%;border-radius:99px;
+    background:linear-gradient(90deg,color-mix(in srgb,var(--c) 45%,transparent),var(--c));
+    box-shadow:0 0 12px var(--c);transition:width .8s cubic-bezier(.22,.9,.3,1)}
+  .bar-row .b-num{width:42px;font-family:Orbitron,monospace;font-size:12px;color:var(--c)}
+  .tl-day{font-size:11.5px;letter-spacing:.2em;color:var(--accent);margin:16px 0 8px}
+  .tl-day:first-child{margin-top:0}
+  #searchBox{display:flex;gap:10px}
+  #searchBox input{flex:1;background:rgba(125,211,252,.06);border:1px solid rgba(125,211,252,.2);
+    border-radius:10px;padding:12px 16px;color:#fff;font-size:14px;font-family:inherit;outline:none}
+  #searchBox input:focus{border-color:var(--accent);box-shadow:0 0 14px rgba(125,211,252,.2)}
+  #searchBox button{background:rgba(125,211,252,.15);border:1px solid rgba(125,211,252,.35);
+    color:var(--accent);border-radius:10px;padding:0 22px;cursor:pointer;font-size:13.5px;font-family:inherit}
+  #searchBox button:hover{background:rgba(125,211,252,.25);color:#fff}
+  .search-tip{margin-top:12px;font-size:11.5px;color:var(--dim)}
+  #quote{position:fixed;bottom:30px;right:34px;width:280px;padding:16px 20px;z-index:4;
+    font-size:12.5px;line-height:1.9;color:#cfdcf5;pointer-events:none}
+  #quote .by{display:block;text-align:right;color:var(--dim);margin-top:6px;font-size:11px}
+  #quote::before{content:"❝";color:var(--accent);font-size:20px;display:block;margin-bottom:4px}
+
+  /* ---------- 二级面板 ---------- */
+  #panel{position:fixed;top:0;right:0;height:100%;width:380px;z-index:6;
+    background:linear-gradient(200deg,rgba(10,18,38,.92),rgba(5,8,18,.94));
+    border-left:1px solid var(--card-border);backdrop-filter:blur(18px);
+    transform:translateX(105%);transition:transform .55s cubic-bezier(.22,.9,.3,1);
+    display:flex;flex-direction:column}
+  #panel.open{transform:translateX(0)}
+  .p-head{padding:78px 28px 20px;border-bottom:1px solid rgba(125,211,252,.12);
+    background:radial-gradient(120% 90% at 100% 0%,
+      color-mix(in srgb,var(--c) 22%,transparent),transparent 70%)}
+  .p-eyebrow{font-family:Orbitron,monospace;font-size:10px;letter-spacing:.4em;color:var(--c)}
+  .p-head h2{font-size:24px;margin-top:8px;color:#fff;font-weight:700}
+  .p-head h2 span{display:block;font-family:Orbitron,monospace;font-size:11.5px;
+    letter-spacing:.18em;color:var(--dim);font-weight:500;margin-top:5px}
+  .p-stats{margin-top:12px;font-size:12.5px;color:var(--c)}
+  .p-desc{margin-top:8px;font-size:12.5px;color:var(--dim);line-height:1.8}
+  .p-body{flex:1;overflow-y:auto;padding:18px 22px 30px}
+  .p-body::-webkit-scrollbar{width:4px}
+  .p-body::-webkit-scrollbar-thumb{background:rgba(125,211,252,.25);border-radius:4px}
+  .p-section{margin-bottom:22px}
+  .p-section>h3{font-size:11.5px;letter-spacing:.25em;color:var(--accent);
+    font-weight:500;margin-bottom:10px}
+  .sub{border:1px solid rgba(125,211,252,.13);border-radius:10px;margin-bottom:8px;
+    overflow:hidden;background:rgba(125,211,252,.04)}
+  .sub-head{display:flex;justify-content:space-between;align-items:center;
+    padding:10px 14px;cursor:pointer;font-size:13px;color:#eaf3ff}
+  .sub-head:hover{background:rgba(125,211,252,.08)}
+  .sub-head .n{font-family:Orbitron,monospace;font-size:11px;color:var(--c)}
+  .sub-head .n::after{content:"▾";margin-left:8px;color:var(--dim);
+    display:inline-block;transition:transform .3s}
+  .sub.open .sub-head .n::after{transform:rotate(180deg)}
+  .sub-notes{display:none;padding:2px 8px 8px}
+  .sub.open .sub-notes{display:block}
+  .sub.flash{animation:flash 1.2s ease}
+  @keyframes flash{0%,60%{box-shadow:0 0 0 1px var(--c),0 0 18px var(--c)}100%{box-shadow:none}}
+  .empty{font-size:11.5px;color:var(--dim);padding:4px 8px 8px}
+
+  #backBtn{position:fixed;top:96px;left:34px;z-index:7;display:none;align-items:center;gap:10px;
+    padding:11px 22px;border:1px solid var(--card-border);border-radius:99px;cursor:pointer;
+    background:var(--card);backdrop-filter:blur(14px);color:var(--accent);
+    font-size:13px;letter-spacing:.15em;font-family:inherit;transition:all .25s}
+  #backBtn:hover{background:rgba(125,211,252,.15);box-shadow:0 0 24px rgba(125,211,252,.25)}
+  #backBtn.show{display:flex}
+
+  body.focused #overview,body.focused #recent,body.focused #hint,body.focused #quote{
+    opacity:0;pointer-events:none;transition:opacity .4s}
+  #overview,#recent,#quote{transition:opacity .4s}
+</style>
+<script src="config.js"></script>
+<!-- Demo data ships with the repo; your generated data.js (or committed snapshot) overrides it if present. -->
+<script src="data.demo.js"></script>
+<script src="data.js" onerror="window.__usingDemo=1"></script>
+<script src="textures.js"></script>
+<script type="importmap">
+  {"imports":{
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }}
+</script>
+</head>
+<body>
+
+<div id="loader"><div class="pulse"></div>ENTERING SOPHIA GALAXY</div>
+<div id="bg"></div>
+<div id="labels"></div>
+
+<header>
+  <h1 id="hTitle">SOPHIA GALAXY</h1>
+  <p id="hSub">PROVENANCE  •  WISDOM  •  AGI</p>
+</header>
+
+<div id="clock">
+  <div class="date"></div>
+  <div class="time"></div>
+  <div class="mode">GALAXY VIEW</div>
+</div>
+
+<aside id="overview" class="glass">
+  <h3>GALAXY OVERVIEW</h3>
+  <div id="statRows"></div>
+</aside>
+
+<aside id="recent" class="glass">
+  <h3>RECENT NOTES</h3>
+  <div id="recentRows"></div>
+</aside>
+
+<div id="hint">Drag to orbit · scroll to zoom · click a planet to enter · drag a planet to spin it</div>
+
+<aside id="quote" class="glass">
+  <span id="qText">Per aspera ad astra</span>
+  <span class="by" id="qBy">through hardship to the stars</span>
+</aside>
+
+<button id="backBtn">⟵&nbsp; Back to galaxy</button>
+<div id="panel"><div class="p-head"></div><div class="p-body"></div></div>
+
+<nav id="nav" class="glass">
+  <div class="nav-item active" data-view="galaxy"><div class="ni">🌌</div><span>Galaxy</span></div>
+  <div class="nav-item" data-view="grid"><div class="ni">▦</div><span>Grid</span></div>
+  <div class="nav-item" data-view="timeline"><div class="ni">🕒</div><span>Timeline</span></div>
+  <div class="nav-item" data-view="stats"><div class="ni">📊</div><span>Stats</span></div>
+  <div class="nav-item" data-view="search"><div class="ni">🔍</div><span>Search</span></div>
+</nav>
+
+<div id="modal"><div class="box glass">
+  <div class="m-head"><h2></h2><div class="m-close">✕</div></div>
+  <div class="m-body"></div>
+</div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+
+const DATA = window.GALAXY_DATA;
+const CFG = window.GALAXY_CONFIG || {};
+
+/* 应用 config.js 里的文案（标题/副标题/名言），缺省保留 HTML 里的英文默认值 */
+if(CFG.title)    document.getElementById('hTitle').textContent = CFG.title;
+if(CFG.subtitle) document.getElementById('hSub').textContent   = CFG.subtitle;
+if(CFG.quote)    document.getElementById('qText').textContent  = CFG.quote;
+if(CFG.quoteBy)  document.getElementById('qBy').textContent    = CFG.quoteBy;
+document.title = CFG.title ? CFG.title : document.title;
+const VAULT = DATA.vault;
+
+/* ============ 行星风格（新文件夹自动用默认风格） ============ */
+/* 行星风格来自 config.js。未配置的文件夹自动从调色板取色，仍然好看。 */
+const STYLE = CFG.style || {};
+const PALETTE = CFG.palette || ['#7dd3fc','#a855f7','#4ade80','#fbbf24','#ff6a3d','#2f6df6'];
+function styleFor(f, i){
+  return STYLE[f.name] || {sub:'', color:PALETTE[i % PALETTE.length],
+    ring:false, desc:'A folder in the sophia-agi knowledge base.'};
+}
+
+/* ============ 基础场景 ============ */
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x04060f, 0.0008);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 2000);
+const HOME_POS = new THREE.Vector3(0, 82, 164);
+camera.position.copy(HOME_POS);
+
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setClearColor(0x000000, 0);          // 透明画布，银河底图从下面透出来
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+/* Bloom 辉光管线：底图必须进 3D 场景（透明画布与 bloom 不兼容） */
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(Math.min(devicePixelRatio, 2));
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .5, .55, .62);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* 底图：优先 textures.js 的 __bg（挂相机的 3D 幕板，永远铺满视野）；
+   没有 __bg 时退回 CSS 模式（无 bloom 但仍可用） */
+const bgEl = document.getElementById('bg');
+let bgPlane = null;
+scene.add(camera);
+if(window.GALAXY_TEXTURES?.__bg){
+  new THREE.TextureLoader().load(window.GALAXY_TEXTURES.__bg, t => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    bgPlane = new THREE.Mesh(new THREE.PlaneGeometry(2600, 1460),
+      new THREE.MeshBasicMaterial({map:t, fog:false}));
+    bgPlane.position.z = -900;
+    camera.add(bgPlane);
+    document.body.classList.add('has-bg3d');
+  });
+} else (function loadBg(cands){
+  if(!cands.length) return;
+  const img = new Image();
+  img.onload = () => { bgEl.style.backgroundImage = `url('${cands[0]}')`;
+                       document.body.classList.add('has-bg'); };
+  img.onerror = () => loadBg(cands.slice(1));
+  img.src = cands[0];
+})(['bg.jpg','bg.png','bg.webp']);
+
+scene.add(new THREE.AmbientLight(0x3a4a78, 1.1));
+scene.add(new THREE.HemisphereLight(0x8899ff, 0x140a24, .55));
+const coreLight = new THREE.PointLight(0xffe8c8, 2.4, 0, 0);
+scene.add(coreLight);
+const camLight = new THREE.DirectionalLight(0xbfd4ff, 1.6);  // 跟随相机的主光，保证看到的是亮面
+scene.add(camLight); scene.add(camLight.target);
+
+const galaxy = new THREE.Group();   // 拖拽旋转的整体
+scene.add(galaxy);
+
+/* ============ 工具 ============ */
+const mulberry = s => () => (s=(s+0x6D2B79F5)|0,
+  ((Math.imul(s^s>>>15,1|s)+Math.imul(s^s>>>7,61|s)^s)>>>0)/4294967296);
+
+function glowTexture(color){
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0, color+'cc'); g.addColorStop(.35, color+'55'); g.addColorStop(1, color+'00');
+  x.fillStyle = g; x.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+
+function planetTexture(hex, seed){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const x = c.getContext('2d'), rnd = mulberry(seed);
+  const col = new THREE.Color(hex);
+  const shade = k => '#'+col.clone().multiplyScalar(k).getHexString();
+  const grad = x.createLinearGradient(0,0,0,256);
+  grad.addColorStop(0, shade(.75)); grad.addColorStop(.5, shade(1.35)); grad.addColorStop(1, shade(.6));
+  x.fillStyle = grad; x.fillRect(0,0,512,256);
+  for(let i=0;i<14;i++){                       // 气态条带
+    x.fillStyle = shade(.5 + rnd()*1.1) + Math.floor(34+rnd()*60).toString(16);
+    const y = rnd()*256; x.fillRect(0, y, 512, 4+rnd()*18);
+  }
+  for(let i=0;i<90;i++){                       // 噪点斑块
+    x.fillStyle = shade(.45 + rnd()*1.2) + Math.floor(24+rnd()*56).toString(16);
+    x.beginPath();
+    x.ellipse(rnd()*512, rnd()*256, 6+rnd()*36, 3+rnd()*12, rnd()*Math.PI, 0, Math.PI*2);
+    x.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/* ============ 背景：星空 + 星云 ============ */
+{
+  const make = (n, size, rMin, rMax, opacity) => {
+    const pos = new Float32Array(n*3);
+    for(let i=0;i<n;i++){
+      const v = new THREE.Vector3().randomDirection()
+        .multiplyScalar(rMin + Math.random()*(rMax-rMin));
+      pos.set([v.x,v.y,v.z], i*3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+    const m = new THREE.PointsMaterial({color:0xcfe2ff, size, sizeAttenuation:true,
+      transparent:true, opacity, depthWrite:false});
+    scene.add(new THREE.Points(g,m));
+  };
+  make(2400,1.1,260,640,.9); make(1500,.6,200,640,.6); make(500,2.0,300,640,.5);
+
+  [['#7c3aed',-260,40,-340,420],['#1d4ed8',300,-60,-380,520],
+   ['#0e7490',-340,-90,-300,380],['#9d174d',240,120,-420,460]]
+  .forEach(([col,x,y,z,s])=>{
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTexture(col),
+      transparent:true, opacity:.16, depthWrite:false, blending:THREE.AdditiveBlending}));
+    sp.position.set(x,y,z); sp.scale.setScalar(s); scene.add(sp);
+  });
+}
+
+/* ============ 中心：螺旋银河核 ============ */
+{
+  const N = 9000, R = 27, branches = 4, spin = 1.25;
+  const pos = new Float32Array(N*3), col = new Float32Array(N*3);
+  const inner = new THREE.Color('#ffc879'), mid = new THREE.Color('#c084fc'),
+        outer = new THREE.Color('#5a6cf0');
+  for(let i=0;i<N;i++){
+    const r = Math.pow(Math.random(), 1.45) * R;
+    const a = (i % branches) / branches * Math.PI*2 + r*spin;
+    const rd = () => (Math.random()-.5) * Math.pow(Math.random(),2) * 10 * (1 - r/R*.45);
+    pos.set([Math.cos(a)*r + rd(), rd()*.5, Math.sin(a)*r + rd()], i*3);
+    const t = r/R;
+    const c = t<.5 ? inner.clone().lerp(mid, t*2) : mid.clone().lerp(outer, t*2-1);
+    col.set([c.r,c.g,c.b], i*3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('color', new THREE.BufferAttribute(col,3));
+  const core = new THREE.Points(g, new THREE.PointsMaterial({size:.45, vertexColors:true,
+    transparent:true, opacity:.9, depthWrite:false, blending:THREE.AdditiveBlending}));
+  core.name = 'core'; galaxy.add(core);
+
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTexture('#ffe2b0'),
+    transparent:true, opacity:.85, depthWrite:false, blending:THREE.AdditiveBlending}));
+  halo.scale.setScalar(26); galaxy.add(halo);
+}
+
+/* ============ 行星 ============ */
+const planets = [];
+const maxNotes = Math.max(...DATA.folders.map(f=>f.notes));
+
+/* 荧光大气层：菲涅尔边缘光 shader（BackSide 壳 + additive） */
+const atmVert = `
+  varying vec3 vNormal; varying vec3 vPos;
+  void main(){
+    vNormal = normalize(normalMatrix * normal);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vPos = mv.xyz;
+    gl_Position = projectionMatrix * mv;
+  }`;
+const atmFrag = `
+  uniform vec3 uColor; uniform float uOpacity; uniform float uTime; uniform float uSeed;
+  varying vec3 vNormal; varying vec3 vPos;
+  float hash(vec3 p){ p = fract(p*.3183099 + .1); p *= 17.;
+    return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+  float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.-2.*f);
+    return mix(mix(mix(hash(i),            hash(i+vec3(1,0,0)), f.x),
+                   mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)), f.x), f.y),
+               mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)), f.x),
+                   mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)), f.x), f.y), f.z); }
+  void main(){
+    vec3 n = normalize(vNormal);
+    float rim = pow(1.0 - abs(dot(n, normalize(-vPos))), 2.2);
+    /* 电弧：双频脊状噪声 → 球缘游走的闪电细丝，随时间扭动 + 闪烁 */
+    float n1 = noise(n*6.0  + vec3(0.0, uTime*.7, uSeed));
+    float n2 = noise(n*14.0 - vec3(uTime*.9, 0.0, uSeed*2.0));
+    float ridge = 1.0 - abs(2.0*mix(n1, n2, .5) - 1.0);
+    float arc = smoothstep(.90, 1.0, ridge) * (.55 + .45*sin(uTime*7.0 + uSeed*10.0));
+    float a = rim*.8 + pow(rim, 1.6)*arc*2.4;
+    gl_FragColor = vec4(uColor + vec3(.85)*arc*rim, a * uOpacity);
+  }`;
+
+DATA.folders.forEach((f, i) => {
+  const st = styleFor(f, i);
+  const radius = 4.0 + 4.4 * Math.sqrt(f.notes / maxNotes);   // 行星加倍
+  const orbitR = 36 + i * 11.5;
+  const angle0 = i * (Math.PI*2/DATA.folders.length) * 3 + .8;  // ×3 与 8 互质，保证均匀散开
+
+  const pivot = new THREE.Group();
+  pivot.rotation.y = angle0;
+  galaxy.add(pivot);
+
+  const grp = new THREE.Group();
+  grp.position.x = orbitR;
+  pivot.add(grp);
+
+  const mat = new THREE.MeshStandardMaterial({
+    map: planetTexture(st.color, 1000 + i*77),
+    roughness:.7, metalness:.12,
+    emissive: new THREE.Color(st.color).multiplyScalar(.22),
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 48, 48), mat);
+  mesh.rotation.z = .15; grp.add(mesh);
+
+  /* 专属高清贴图（textures/<文件夹名>.jpg → embed_textures.py 打包） */
+  const texUri = window.GALAXY_TEXTURES?.[f.name];
+  if(texUri) new THREE.TextureLoader().load(texUri, t => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    mat.map = t;
+    mat.emissiveMap = t;                          // 同图做发光：能量脉络自发光
+    mat.emissive = new THREE.Color(0xffffff);
+    mat.emissiveIntensity = st.boost ?? .58;   // dark textures can set boost>1 in config.js
+    mat.roughness = .55;
+    mat.needsUpdate = true;
+  });
+
+  const atmMat = new THREE.ShaderMaterial({
+    uniforms:{uColor:{value:new THREE.Color(st.color)}, uOpacity:{value:.9},
+              uTime:{value:0}, uSeed:{value:i*7.3}},
+    vertexShader:atmVert, fragmentShader:atmFrag,
+    side:THREE.BackSide, transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending});
+  grp.add(new THREE.Mesh(new THREE.SphereGeometry(radius*1.22, 48, 48), atmMat));
+
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTexture(st.color),
+    transparent:true, opacity:.55, depthWrite:false, blending:THREE.AdditiveBlending}));
+  glow.scale.setScalar(radius*3.1); grp.add(glow);
+
+  let ringMats = [];
+  if(st.ring){
+    [[1.5,2.15,.2],[2.25,2.38,.38]].forEach(([a,b,o])=>{
+      const rm = new THREE.MeshBasicMaterial({color:st.color, side:THREE.DoubleSide,
+        transparent:true, opacity:o, depthWrite:false});
+      const ring = new THREE.Mesh(new THREE.RingGeometry(radius*a, radius*b, 80), rm);
+      ring.rotation.x = Math.PI/2 - .32; grp.add(ring); ringMats.push(rm);
+    });
+  }
+
+  const orbitMat = new THREE.LineBasicMaterial({color:0x3d5a9e, transparent:true, opacity:.16});
+  const pts = [];
+  for(let k=0;k<=128;k++){
+    const a = k/128*Math.PI*2;
+    pts.push(new THREE.Vector3(Math.cos(a)*orbitR, 0, Math.sin(a)*orbitR));
+  }
+  galaxy.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), orbitMat));
+
+  const label = document.createElement('div');
+  label.className = 'pl-label';
+  label.style.setProperty('--c', st.color);
+  label.innerHTML = `<div class="en">${f.name}</div>
+    <div class="zh">${st.sub ? st.sub + ' · ' : ''}<b>${f.notes}</b> notes</div>`;
+  document.getElementById('labels').appendChild(label);
+
+  planets.push({data:f, st, pivot, grp, mesh, glow:glow.material, atm:atmMat, ringMats, orbitMat,
+    /* 统一角速度 = 刚性编队：行星间距永远保持均匀，不会越转越堆到一边 */
+    radius, orbitR, speed:.02, spin:.25 + (i%3)*.08,
+    label, hover:false, scl:1});
+});
+
+/* ============ HUD：总览 / 最近更新 / 时钟 ============ */
+const ago = ts => {
+  const s = Date.now()/1000 - ts;
+  if(s < 3600) return Math.max(1,Math.floor(s/60)) + 'm ago';
+  if(s < 86400) return Math.floor(s/3600) + 'h ago';
+  if(s < 86400*30) return Math.floor(s/86400) + 'd ago';
+  return Math.floor(s/86400/30) + 'mo ago';
+};
+const esc = s => s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const openNote = p => location.href =
+  `obsidian://open?vault=${encodeURIComponent(VAULT)}&file=${encodeURIComponent(p)}`;
+
+document.getElementById('statRows').innerHTML = `
+  <div class="stat"><span><span class="ico">🪐</span>Planets</span><b>${DATA.folders.length}</b></div>
+  <div class="stat"><span><span class="ico">📄</span>Total notes</span><b>${DATA.totalNotes}</b></div>
+  <div class="stat"><span><span class="ico">✨</span>Updated today</span><b>${DATA.todayUpdated}</b></div>
+  <div class="stat"><span><span class="ico">🛰️</span>Snapshot</span>
+    <span style="font-size:11px;color:var(--dim)">${DATA.generated}</span></div>`;
+
+document.getElementById('recentRows').innerHTML = DATA.recentAll.map(n =>
+  `<div class="note-row" data-p="${esc(n.path)}">
+     <span class="t">${esc(n.title)}</span><span class="ago">${ago(n.mtime)}</span></div>`).join('');
+document.getElementById('recentRows').onclick = e => {
+  const row = e.target.closest('.note-row'); if(row) openNote(row.dataset.p);
+};
+
+const clock = () => {
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  document.querySelector('#clock .date').textContent =
+    `${d.getFullYear()} / ${p(d.getMonth()+1)} / ${p(d.getDate())}  ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}`;
+  document.querySelector('#clock .time').textContent =
+    `${p(d.getHours())} : ${p(d.getMinutes())} : ${p(d.getSeconds())}`;
+};
+clock(); setInterval(clock, 1000);
+
+/* ============ 交互状态机 ============ */
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let rotY = .4, rotX = .12, tRotY = rotY, tRotX = rotX;
+let camDist = 1, tCamDist = 1;
+let focus = null, moons = [], camAnim = null, hovered = null;
+const modeEl = document.querySelector('#clock .mode');
+
+function setPointer(e){
+  ptr.x = (e.clientX/innerWidth)*2 - 1;
+  ptr.y = -(e.clientY/innerHeight)*2 + 1;
+}
+function pick(objs){
+  ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObjects(objs, false)[0];
+  return hit ? hit.object : null;
+}
+
+/* ---- 拖拽：空白转星系，行星上转星球 ---- */
+let drag = null;
+addEventListener('pointerdown', e => {
+  if(e.target.closest('#panel,#overview,#recent,#backBtn,#nav,#modal')) return;
+  setPointer(e);
+  const onPlanet = pick(planets.map(p=>p.mesh));
+  drag = {x:e.clientX, y:e.clientY, t:Date.now(), moved:0,
+          spinTarget: onPlanet ? planets.find(p=>p.mesh===onPlanet) : null};
+});
+addEventListener('pointermove', e => {
+  setPointer(e);
+  if(drag){
+    const dx = e.clientX-drag.x, dy = e.clientY-drag.y;
+    drag.moved += Math.abs(dx)+Math.abs(dy);
+    if(drag.spinTarget){                 // 在球体上拖拽 → 星球自转
+      drag.spinTarget.mesh.rotation.y += dx*.012;
+      drag.spinTarget.mesh.rotation.x += dy*.008;
+    } else if(!focus){                   // 空白处拖拽 → 整个星系
+      tRotY += dx*.0045; tRotX = THREE.MathUtils.clamp(tRotX + dy*.003, -.25, .75);
+    }
+    drag.x = e.clientX; drag.y = e.clientY;
+  }
+});
+addEventListener('pointerup', e => {
+  const wasClick = drag && drag.moved < 6 && Date.now()-drag.t < 400;
+  drag = null;
+  if(!wasClick || e.target.closest('#panel,#overview,#recent,#backBtn,#nav,#modal')) return;
+  setPointer(e);
+  if(!focus){
+    const m = pick(planets.map(p=>p.mesh));
+    if(m) enterPlanet(planets.find(p=>p.mesh===m));
+  } else {
+    const m = pick(moons.map(m=>m.mesh));
+    if(m) flashSub(moons.find(x=>x.mesh===m).name);
+  }
+});
+addEventListener('wheel', e => {
+  if(e.target.closest('#panel,#modal')) return;
+  tCamDist = THREE.MathUtils.clamp(tCamDist * (1 + Math.sign(e.deltaY)*.08), .45, 1.9);
+}, {passive:true});
+
+/* ---- 进入行星 ---- */
+function enterPlanet(p){
+  if(focus === p) return;
+  if(focus){          // 从另一颗行星直接切换：先清掉旧卫星
+    moons.forEach(m => { m.pivot.removeFromParent();
+      m.mesh.geometry.dispose(); m.label.remove(); });
+    moons = [];
+  }
+  focus = p;
+  document.body.classList.add('focused');
+  document.getElementById('backBtn').classList.add('show');
+  modeEl.textContent = 'PLANET VIEW — ' + p.data.name;
+  planets.forEach(o => { if(o!==p){
+    o.mesh.material.transparent = true;
+    o.mesh.material.needsUpdate = true;   // 切换 transparent 必须重建渲染状态
+    o.fade = {mesh:o.mesh.material, glow:o.glow, orbit:o.orbitMat};
+  }});
+  buildMoons(p);
+  buildPanel(p);
+  document.getElementById('panel').classList.add('open');
+  camAnim = {t:0, from:camera.position.clone(),
+             fromLook:new THREE.Vector3(0,0,0), mode:'in'};
+}
+
+function leavePlanet(){
+  if(!focus) return;
+  document.body.classList.remove('focused');
+  document.getElementById('backBtn').classList.remove('show');
+  document.getElementById('panel').classList.remove('open');
+  modeEl.textContent = 'GALAXY VIEW';
+  moons.forEach(m => { m.pivot.removeFromParent();
+    m.mesh.geometry.dispose(); m.label.remove(); });
+  moons = [];
+  const look = focus.grp.getWorldPosition(new THREE.Vector3());
+  camAnim = {t:0, from:camera.position.clone(), fromLook:look, mode:'out'};
+  focus = null;
+}
+document.getElementById('backBtn').onclick = leavePlanet;
+addEventListener('keydown', e => {
+  if(e.key !== 'Escape') return;
+  if(document.getElementById('modal').classList.contains('open')) closeModal();
+  else leavePlanet();
+});
+
+/* ============ 底部导航 + 弹层 ============ */
+const modal = document.getElementById('modal');
+const navItems = [...document.querySelectorAll('.nav-item')];
+const setActiveNav = v => navItems.forEach(n =>
+  n.classList.toggle('active', n.dataset.view === v));
+
+function closeModal(){ modal.classList.remove('open'); setActiveNav('galaxy'); }
+modal.addEventListener('click', e => {
+  if(e.target === modal || e.target.closest('.m-close')) closeModal();
+});
+
+function openModal(title, html){
+  modal.querySelector('.m-head h2').textContent = title;
+  modal.querySelector('.m-body').innerHTML = html;
+  modal.classList.add('open');
+}
+
+const VIEWS = {
+  grid(){
+    openModal('Grid · all planets', `<div class="grid">` +
+      planets.map(p => `
+        <div class="g-card" data-name="${esc(p.data.name)}" style="--c:${p.st.color}">
+          <div class="g-en">${esc(p.data.name)}</div>
+          <div class="g-zh">${p.st.sub || ''}</div>
+          <div class="g-meta">${p.data.notes} notes · ${p.data.subs.length} subfolders</div>
+        </div>`).join('') + `</div>`);
+  },
+  timeline(){
+    const seen = new Set(), all = [];
+    planets.forEach(p => p.data.recent.forEach(n => {
+      if(!seen.has(n.path)){ seen.add(n.path);
+        all.push({...n, color:p.st.color}); }
+    }));
+    all.sort((a,b) => b.mtime - a.mtime);
+    const dayKey = ts => {
+      const d = Math.floor((Date.now()/1000 - ts) / 86400);
+      return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : d < 7 ? `${d} days ago` : 'Earlier';
+    };
+    let lastDay = null, html = '';
+    all.slice(0, 40).forEach(n => {
+      const k = dayKey(n.mtime);
+      if(k !== lastDay){ html += `<div class="tl-day">${k}</div>`; lastDay = k; }
+      html += `<div class="note-row" data-p="${esc(n.path)}" style="--c:${n.color}">
+        <span class="t" style="color:${n.color}">${esc(n.title)}</span>
+        <span class="ago">${ago(n.mtime)}</span></div>`;
+    });
+    openModal('Timeline · recent activity', html);
+  },
+  stats(){
+    const sorted = [...planets].sort((a,b) => b.data.notes - a.data.notes);
+    const max = sorted[0].data.notes;
+    openModal('Stats · note distribution', sorted.map(p => `
+      <div class="bar-row" style="--c:${p.st.color}">
+        <span class="b-name">${esc(p.data.name)}</span>
+        <div class="b-track"><div class="b-fill" style="width:${(p.data.notes/max*100).toFixed(0)}%"></div></div>
+        <span class="b-num">${p.data.notes}</span>
+      </div>`).join('') +
+      `<div class="search-tip">${DATA.totalNotes} notes total · ${DATA.todayUpdated} updated today · snapshot ${DATA.generated}</div>`);
+  },
+  search(){
+    openModal('Search · jump to Obsidian', `
+      <div id="searchBox">
+        <input type="text" placeholder="Type a keyword, press Enter to search in Obsidian…" autofocus>
+        <button>Search</button>
+      </div>
+      <div class="search-tip">Opens a full-vault search in Obsidian (obsidian://search)</div>`);
+    const input = modal.querySelector('input'), go = () => {
+      const q = input.value.trim(); if(!q) return;
+      location.href = `obsidian://search?vault=${encodeURIComponent(VAULT)}&query=${encodeURIComponent(q)}`;
+    };
+    modal.querySelector('button').onclick = go;
+    input.onkeydown = e => { if(e.key === 'Enter') go(); };
+    setTimeout(() => input.focus(), 50);
+  },
+};
+
+navItems.forEach(n => n.onclick = () => {
+  const v = n.dataset.view;
+  if(v === 'galaxy'){ closeModal(); leavePlanet(); return; }
+  setActiveNav(v); VIEWS[v]();
+});
+
+modal.querySelector('.m-body').parentElement.addEventListener('click', e => {
+  const row = e.target.closest('.note-row');
+  if(row) return openNote(row.dataset.p);
+  const card = e.target.closest('.g-card');
+  if(card){
+    const p = planets.find(p => p.data.name === card.dataset.name);
+    closeModal();
+    if(p) enterPlanet(p);
+  }
+});
+
+function buildMoons(p){
+  const maxSub = Math.max(1, ...p.data.subs.map(s=>s.notes));
+  p.data.subs.forEach((s, i) => {
+    const pivot = new THREE.Group();
+    pivot.rotation.y = i * (Math.PI*2/Math.max(1,p.data.subs.length));
+    pivot.rotation.x = (i%2 ? 1 : -1) * .12;
+    p.grp.add(pivot);
+    const r = .62 + .72*Math.sqrt(s.notes/maxSub);
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 24),
+      new THREE.MeshStandardMaterial({map:planetTexture(p.st.color, 7000+i*31),
+        roughness:.85, metalness:.1,
+        emissive:new THREE.Color(p.st.color).multiplyScalar(.18)}));
+    mesh.position.x = p.radius*2.1 + (i%3)*1.1;
+    pivot.add(mesh);
+    const label = document.createElement('div');
+    label.className = 'moon-label';
+    label.innerHTML = `${esc(s.name)}<span>${s.notes}</span>`;
+    document.getElementById('labels').appendChild(label);
+    moons.push({pivot, mesh, label, name:s.name, speed:.5 + i*.13});
+  });
+}
+
+/* ---- 二级面板 ---- */
+function buildPanel(p){
+  const st = p.st;
+  const head = document.querySelector('#panel .p-head');
+  head.style.setProperty('--c', st.color);
+  head.innerHTML = `
+    <div class="p-eyebrow">PLANET${st.sub ? ' / ' + st.sub : ''}</div>
+    <h2>${esc(p.data.name)}<span>${st.sub || ''}</span></h2>
+    <div class="p-stats" style="--c:${st.color};color:${st.color}">
+      ${p.data.notes} notes · ${p.data.subs.length} moons (subfolders)</div>
+    <p class="p-desc">${st.desc}</p>`;
+  const noteRow = n => `<div class="note-row" data-p="${esc(n.path)}">
+      <span class="t">${esc(n.title)}</span><span class="ago">${ago(n.mtime)}</span></div>`;
+  const body = document.querySelector('#panel .p-body');
+  body.innerHTML = `
+    <div class="p-section"><h3>🛰️ MOONS · SUBFOLDERS</h3>
+      ${p.data.subs.map(s => `
+        <div class="sub" data-name="${esc(s.name)}" style="--c:${st.color}">
+          <div class="sub-head"><span>📁 ${esc(s.name)}</span>
+            <span class="n">${s.notes}</span></div>
+          <div class="sub-notes">${s.recent.length
+            ? s.recent.map(noteRow).join('')
+            : '<div class="empty">No notes yet</div>'}</div>
+        </div>`).join('') || '<div class="empty">This planet has no moons yet</div>'}
+    </div>
+    <div class="p-section"><h3>🕒 RECENT NOTES</h3>
+      ${p.data.recent.map(noteRow).join('')}</div>`;
+  body.onclick = e => {
+    const row = e.target.closest('.note-row');
+    if(row) return openNote(row.dataset.p);
+    const sh = e.target.closest('.sub-head');
+    if(sh) sh.parentElement.classList.toggle('open');
+  };
+}
+
+function flashSub(name){
+  const el = document.querySelector(`#panel .sub[data-name="${CSS.escape(name)}"]`);
+  if(!el) return;
+  el.classList.add('open');
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+
+/* ============ 渲染循环 ============ */
+const labelPos = new THREE.Vector3();
+function place(el, obj, yOff, hide){
+  obj.getWorldPosition(labelPos);
+  labelPos.y += yOff;
+  labelPos.project(camera);
+  const behind = labelPos.z > 1;
+  el.style.opacity = (hide || behind) ? 0 : 1;
+  if(!behind){
+    el.style.left = (labelPos.x*.5+.5)*innerWidth + 'px';
+    el.style.top  = (-labelPos.y*.5+.5)*innerHeight + 'px';
+  }
+}
+
+const clockV = new THREE.Clock();
+const easeIO = t => t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
+const tmpLook = new THREE.Vector3();
+
+function animate(){
+  requestAnimationFrame(animate);
+  tick();
+}
+/* 单帧渲染（也供调试：__G.step() 可在 rAF 被挂起时手动驱动） */
+function tick(){
+  const dt = Math.min(clockV.getDelta(), .05);
+  const t = clockV.elapsedTime;
+
+  galaxy.getObjectByName('core').rotation.y = t*.02;
+
+  rotY += (tRotY-rotY)*.06; rotX += (tRotX-rotX)*.06;
+  galaxy.rotation.y = rotY; galaxy.rotation.x = rotX;
+  camDist += (tCamDist-camDist)*.08;
+
+  /* 底图视差：跟随拖拽轻微移动（sin 包裹，转满圈也不会跑飞） */
+  if(bgPlane){
+    bgPlane.position.x = Math.sin(rotY)*-38;
+    bgPlane.position.y = Math.sin(rotX)*-26;
+    /* 聚焦时幕板压暗（替代原 CSS filter） */
+    /* bloom 管线在线性空间：0.09 线性 ≈ 旧 CSS brightness(.4) 的视觉亮度 */
+    const k = bgPlane.material.color.r + ((focus ? .09 : 1) - bgPlane.material.color.r)*.06;
+    bgPlane.material.color.setScalar(k);
+  } else if(document.body.classList.contains('has-bg'))
+    bgEl.style.transform =
+      `translate3d(${Math.sin(rotY)*-26}px, ${Math.sin(rotX)*-18}px, 0) scale(1.12)`;
+
+  /* hover 检测 */
+  if(!drag){
+    const m = focus ? null : pick(planets.map(p=>p.mesh));
+    hovered = m ? planets.find(p=>p.mesh===m) : null;
+    const moonHit = focus ? pick(moons.map(x=>x.mesh)) : null;
+    document.body.style.cursor = (m||moonHit) ? 'pointer' : 'default';
+  }
+
+  planets.forEach(p => {
+    if(!focus) p.pivot.rotation.y += p.speed*dt;          // 公转（聚焦时暂停）
+    if(!drag || drag.spinTarget!==p)
+      p.mesh.rotation.y += p.spin*dt*(p===hovered ? 5 : 1); // 自转，hover 加速
+    const tgt = (p===hovered || p===focus) ? 1.13 : 1;
+    p.scl += (tgt-p.scl)*.1; p.grp.scale.setScalar(p.scl);
+    /* 聚焦近景时辉光要压暗，否则 additive 光晕会把星球糊成色块 */
+    const glowTgt = p===focus ? .18 : (p===hovered ? .85 : .55);
+    p.glow.opacity += (glowTgt - p.glow.opacity)*.1;
+
+    const dim = focus && p!==focus;
+    if(p.fade){
+      /* 线性空间重标定：数值看着极小，视觉≈原 sRGB 管线下 .1/.04 的效果 */
+      p.fade.mesh.opacity += ((dim ? .015 : 1) - p.fade.mesh.opacity)*.07;
+      p.fade.orbit.opacity += ((dim ? .008 : .16) - p.fade.orbit.opacity)*.07;
+      if(dim) p.fade.glow.opacity = Math.min(p.fade.glow.opacity, .02);
+      if(!dim && Math.abs(p.fade.mesh.opacity-1) < .01){
+        p.fade.mesh.opacity = 1; p.mesh.material.transparent = false;
+        p.mesh.material.needsUpdate = true; p.fade = null;
+      }
+    }
+    p.ringMats.forEach(r => r.opacity = dim ? .008 : (r.userData?.o ?? r.opacity));
+    /* 大气层跟随母星淡入淡出；聚焦近景时压暗，否则菲涅尔大面积泛光盖住贴图 */
+    p.atm.uniforms.uOpacity.value = .9 * p.mesh.material.opacity * (p===focus ? .4 : 1);
+    p.atm.uniforms.uTime.value = t;
+  });
+
+  moons.forEach(m => {
+    m.pivot.rotation.y += m.speed*dt;
+    m.mesh.rotation.y += dt;
+  });
+
+  /* 相机 */
+  if(camAnim){
+    camAnim.t = Math.min(1, camAnim.t + dt/1.5);
+    const k = easeIO(camAnim.t);
+    if(camAnim.mode==='in'){
+      const c = focus.grp.getWorldPosition(new THREE.Vector3());
+      const dir = c.clone().sub(galaxy.position).setY(0).normalize();
+      const dest = c.clone().add(dir.multiplyScalar(focus.radius*5.2))
+                    .add(new THREE.Vector3(0, focus.radius*1.9, 0));
+      camera.position.lerpVectors(camAnim.from, dest, k);
+      tmpLook.lerpVectors(camAnim.fromLook, c, k);
+      camera.lookAt(tmpLook);
+      if(camAnim.t>=1) camAnim = null;
+    } else {
+      camera.position.lerpVectors(camAnim.from, HOME_POS.clone().multiplyScalar(camDist), k);
+      tmpLook.lerpVectors(camAnim.fromLook, new THREE.Vector3(0,0,0), k);
+      camera.lookAt(tmpLook);
+      if(camAnim.t>=1) camAnim = null;
+    }
+  } else if(focus){
+    const c = focus.grp.getWorldPosition(new THREE.Vector3());
+    const dir = c.clone().sub(galaxy.position).setY(0).normalize();
+    camera.position.copy(c).add(dir.multiplyScalar(focus.radius*5.2*camDist))
+      .add(new THREE.Vector3(0, focus.radius*1.9*camDist, 0));
+    camera.lookAt(c);
+  } else {
+    camera.position.copy(HOME_POS).multiplyScalar(camDist);
+    camera.lookAt(0,0,0);
+  }
+
+  camLight.position.copy(camera.position).add(new THREE.Vector3(50, 70, 20));
+  camLight.target.position.copy(focus
+    ? focus.grp.getWorldPosition(tmpLook) : new THREE.Vector3(0,0,0));
+
+  /* 标签投影必须在相机定位之后、矩阵强制刷新之后 */
+  camera.updateMatrixWorld();
+  camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+  planets.forEach(p => {
+    const dim = focus && p!==focus;
+    place(p.label, p.grp, p.radius*1.75, dim || (focus===p));
+    p.label.classList.toggle('hot', p===hovered);
+  });
+  moons.forEach(m => place(m.label, m.mesh, .9, false));
+
+  composer.render();
+}
+
+planets.forEach(p => p.ringMats.forEach(r => r.userData = {o:r.opacity}));
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+
+animate();
+setTimeout(() => document.getElementById('loader').classList.add('done'), 600);
+window.__G = {planets, enterPlanet, leavePlanet, camera, galaxy, THREE, step: () => tick(),
+  warp(name){ const p = planets.find(p=>p.data.name===name);
+    if(p){ enterPlanet(p); camAnim = null; } }};
+</script>
+</body>
+</html>
